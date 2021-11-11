@@ -26,29 +26,33 @@ app.get('/', (req, res) => {
 })
 
 app.get('/info', (req, res) => {
-  const info = `
-  <p> Phonebook has info for ${persons.length} people </p>
-  <p> ${new Date()} </p>`
-  res.send(info)
+  Person.collection.count({}).then(count => {
+    const info = 
+    `
+    <p> Phonebook has info for ${count} people </p>
+    <p> ${new Date()} </p>
+    `
+    res.send(info)
+  })
 })
 
-app.get('/api/persons', (req, res) => {
+app.get('/api/persons', (req, res, next) => {
   Person.find({})
     .then(results => {
       res.json(results)
     })
-    .catch(error =>{
-      console.log("error getting persons:", error.message)
-    })
+    .catch(error => next(error))
 })
 
 app.get('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id)
-  const person = persons.find(p => p.id === id)
-  person ? res.json(person) : res.status(404).end()
+  Person.findById(req.params.id)
+    .then(person => {
+      person ? res.json(person) : res.status(404).end()
+    })
+    .catch(error => next(error))
 })
 
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', (req, res, next) => {
   const name = req.body.name
   const number = req.body.number
   if (!name || !number) {
@@ -67,16 +71,49 @@ app.post('/api/persons', (req, res) => {
       console.log(`${savedPerson} has been saved in the phonebook`)
       res.json(savedPerson)
     })
-    .catch(error => {
-      console.log("error adding person: ", error.message)
+    .catch(error => next(error))
+})
+
+app.put('/api/persons/:id', (req, res, next) => {
+  const name = req.body.name
+  const number = req.body.number
+  if (!name || !number) {
+    return res.status(400).json({
+      error: "person's name/number is missing"
     })
+  }
+
+  const newPerson = {
+    name: name,
+    number: number
+  }
+
+  Person.findByIdAndUpdate(req.params.id, newPerson, {new: true})
+    .then(updatedPerson => {
+      res.json(updatedPerson)
+    })
+    .catch(error => next(error))
 })
 
 app.delete('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id)
-  persons = persons.filter(p => p.id !== id)
-  res.status(204).end()
+  Person.findByIdAndRemove(req.params.id)
+    .then(result => {
+      res.status(204).end()
+    })
+    .catch(error => next(error))
 })
+
+const errorHandler = (error, request, response, next) => {
+  console.log(error.message)
+
+  if (error.name === 'CastError') {
+    return response.status(400).send({error: 'malformatted id'})
+  }
+
+  next(error)
+}
+
+app.use(errorHandler)
 
 const PORT = process.env.PORT
 app.listen(PORT)
